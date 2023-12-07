@@ -6,13 +6,13 @@ from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 import time
 
 # set the working directory and host for the receiver
-working_dir = '/data/mabughosh/files/'
+working_dir = '/data/earslan/files/'
 
 
 # define the conversion function
 @python_app
 def convert(inputs=[],  stdout='hello-stdout'):
-    file = '/data/mabughosh/Falcon2Parsl/data/' + inputs.filename
+    file = '/data/earslan/data/' + inputs.filename
     message =  inputs.filename + " is ready for processing"
     return message
     #with open(file, 'r') as f:
