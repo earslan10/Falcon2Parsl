@@ -86,9 +86,7 @@ class Falcon(object):
         while True:
             zmq_socket1.send_string(path)
             message1 = zmq_socket1.recv_string()
-            if message1 == "False":
-                time.sleep(1)
-            else:
+            if message1 != "False":
                 break
 
 
