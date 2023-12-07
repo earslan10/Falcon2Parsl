@@ -117,8 +117,9 @@ def worker(process_id, q):
                         q.put(file_id)
                     else:
                         finished_files.put(file_name)
-                        file_incomplete.value = file_incomplete.value - 1
-
+                        with file_incomplete.get_lock():
+                            file_incomplete.value -= 1
+                    # print("process {0} queue size {1} ".format(process_id, q.qsize()))
                     sock.close()
 
                 except socket.timeout as e:
@@ -205,6 +206,7 @@ def sample_transfer(params):
 
     params = [1 if x < 1 else int(np.round(x)) for x in params]
     log.info("Sample Transfer -- Probing Parameters: {0}".format(params))
+    print("Sample Transfer -- Probing Parameters: {0}".format(params))
     num_workers.value = params[0]
 
     current_cc = np.sum(process_status)
@@ -329,7 +331,8 @@ def report_throughput(start_time):
 
             log.info("Throughput @{0}s: Current: {1}Mbps, Average: {2}Mbps, 60Sec_Average: {3}Mbps".format(
                 time_since_begining, curr_thrpt, thrpt, m_avg))
-
+            print("Throughput @{0}s: Current: {1}Mbps, Average: {2}Mbps, 60Sec_Average: {3}Mbps".format(
+                time_since_begining, curr_thrpt, thrpt, m_avg))
             t2 = time.time()
             time.sleep(max(0, 1 - (t2 - t1)))
 
@@ -340,17 +343,18 @@ def main():
 
     file_incomplete = mp.Value("i", file_count)
     process_status = mp.Array("i", [0 for i in range(configurations["thread_limit"])])
-    file_offsets = mp.Array("d", [0.0 for i in range(file_count)])
+    # file_offsets = mp.Array("d", [0.0 for i in range(file_count)])
 
     if centralized:
         try:
             r_conn.xadd(register_key, {"transfer_id": transfer_id})
         except ConnectionError as e:
             log.error(f"Redis Connection Error: {e}")
+    global q
 
-    q = manager.Queue(maxsize=file_count)
-    for i in range(file_count):
-        q.put(i)
+    #for i in range(file_count):
+    #    q.put(i)
+    print("current queue size " + str(q.qsize()))
     workers = [mp.Process(target=worker, args=(i, q)) for i in range(configurations["thread_limit"])]
     for p in workers:
         p.daemon = True
@@ -377,10 +381,17 @@ def main():
 
 
 def update_arguments(filepath):
-    global file_count
+    global file_count, file_incomplete, file_offsets
+    global q
+    # print("adding new item current queue size " + str(q.qsize()))
     file_names.append(filepath)
     file_sizes.append(os.path.getsize('/' + filepath.split('/', 1)[1]))
+    file_offsets.append(0.0)
+    q.put(file_count)
+    with file_incomplete.get_lock():
+        file_incomplete.value += 1
     file_count += 1
+    # print("added new item current queue size " + str(q.qsize()))
 
 
 def ack():
@@ -392,7 +403,7 @@ def ack():
             finished_files_list = finished_files_list + [finished_files.get() for _ in range(finished_files.qsize())]
         if message not in finished_files_list:
             socket2.send_string("False")
-            time.sleep(1)
+        #            time.sleep(1)
         else:
             finished_files_list.remove(message)
             socket2.send_string("Acknowledgment done for %s " % message)
@@ -405,8 +416,8 @@ def thread_function():
         message = zmq_socket.recv_string()
         print("Received request: %s" % message)
 
-        with lock:
-            update_arguments(message)
+        #with lock:
+        update_arguments(message)
 
         #  Send reply back to client
         zmq_socket.send_string("Queue update with " + message)
@@ -470,20 +481,24 @@ if __name__ == '__main__':
     if "file_transfer" in configurations and configurations["file_transfer"] is not None:
         file_transfer = configurations["file_transfer"]
 
-    manager = mp.Manager()
     probing_time = configurations["probing_sec"]
-    file_names = list()
+
+    manager = mp.Manager()
     finished_files = manager.Queue(-1)
-    file_sizes = list()
-    file_count = 0
     throughput_logs = manager.list()
+    q = manager.Queue(-1)
+
+    file_names = manager.list()
+    file_sizes = manager.list()
+    file_offsets = manager.list()
+    file_count = 0
 
     exit_signal = 10 ** 10
     chunk_size = 1 * 1024 * 1024
     num_workers = mp.Value("i", 0)
     file_incomplete = mp.Value("i", file_count)
     process_status = mp.Array("i", [0 for i in range(configurations["thread_limit"])])
-    file_offsets = mp.Array("d", [0.0 for i in range(file_count)])
+    #,file_offsets = mp.Array("d", [0.0 for i in range(file_count)])
 
     HOST, PORT = configurations["receiver"]["host"], configurations["receiver"]["port"]
     PORT = configurations["receiver"]["port"]
@@ -501,14 +516,15 @@ if __name__ == '__main__':
     acknowledger = Thread(target=ack, args=())
     acknowledger.start()
     print("Starting ...")
+    start_time=time.time()
     while True:
         if file_count > 0:
-            with lock:
-                print("running main")
-                main()
-                file_names = list()
-                file_sizes = list()
-                file_count = 0
-                print("Sleeping")
+            print("running main")
+            main()
+            file_names = list()
+            file_sizes = list()
+            file_count = 0
+            print(time.time()-start_time)
+            print("Sleeping")
         else:
             time.sleep(1)
