@@ -1,7 +1,7 @@
 import parsl
 from parsl import python_app, File
 from parsl.config import Config
-from parsl.data_provider.data_manager import FalconStaging
+from parsl.data_provider.falcon import FalconStaging
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 import time
 
@@ -26,9 +26,9 @@ config = Config(
     executors=[
         ThreadPoolExecutor(
             storage_access=[FalconStaging()],
-            max_threads=20
         ),
     ],
+    internal_tasks_max_threads=20,
 )
 
 # load the Parsl config
