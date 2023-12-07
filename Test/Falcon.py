@@ -40,7 +40,7 @@ start_time = time.time()
 # set up the inputs and outputs for the conversion
 inputs = []
 for x in range(0, 100):
-    inputs.append(File('falcon://134.197.113.70' + working_dir + 'largefile' + str(x) + '.txt'))
+    inputs.append(File('falcon://134.197.113.70' + working_dir + str(x)))
 
 convert_tasks = []
 
